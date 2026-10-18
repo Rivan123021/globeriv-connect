@@ -8,6 +8,14 @@ const PORT = process.env.PORT || 3000, ORIGIN = process.env.FRONTEND_ORIGIN || '
 const FILE = process.env.DATA_FILE || './globeriv-server-data.json';
 let stored = { version: 0, state: { users: {}, requests: [], friends: [], messages: [], groups: {}, calls: [], deletedUsers: {} }, events: [] };
 try { stored = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { }
+// Ephemeral presence: a user is online while a connected browser sends heartbeats.
+// Stored only in server memory; stale sessions expire automatically.
+const presence = new Map(), PRESENCE_TTL = 20000;
+// Short-lived typing status; stored in memory, never added to the shared chat database.
+const typing = new Map(), TYPING_TTL = 3300;
+function activeTyping() { const now = Date.now(), items = []; for (const [id, t] of typing) { if (now - t.at > TYPING_TTL) typing.delete(id); else items.push(t) } return items }
+
+function activePresence() { const now = Date.now(), names = new Set(); for (const [id, p] of presence) { if (now - p.at > PRESENCE_TTL) presence.delete(id); else names.add(p.user) } return [...names] }
 let writing = Promise.resolve();
 function persist() { const snapshot = JSON.stringify(stored); writing = writing.then(() => fs.promises.writeFile(FILE + '.tmp', snapshot).then(() => fs.promises.rename(FILE + '.tmp', FILE))).catch(console.error); return writing }
 const headers = { 'Access-Control-Allow-Origin': ORIGIN, 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Cache-Control': 'no-store' };
@@ -21,6 +29,21 @@ http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') { res.writeHead(204, headers); return res.end() }
     const u = new URL(req.url, 'http://localhost');
     try {
+        if (u.pathname === '/typing' && req.method === 'GET') return reply(res, 200, { typing: activeTyping() });
+        if (u.pathname === '/typing' && req.method === 'POST') {
+            const p = await body(req), user = String(p.user || ''), session = String(p.session || ''), to = String(p.to || '');
+            if (!name(user) || !/^[a-zA-Z0-9._-]{8,100}$/.test(session) || (!name(to) && !/^g:[a-zA-Z0-9_-]{3,100}$/.test(to))) return reply(res, 400, { error: 'Invalid typing data' });
+            const id = session + '|' + to;
+            if (p.active === false) typing.delete(id); else typing.set(id, { from: user, to, at: Date.now(), session });
+            return reply(res, 200, { ok: true });
+        }
+        if (u.pathname === '/presence' && req.method === 'GET') return reply(res, 200, { online: activePresence() });
+        if (u.pathname === '/presence' && req.method === 'POST') {
+            const p = await body(req), user = String(p.user || ''), session = String(p.session || '');
+            if (!name(user) || !/^[a-zA-Z0-9._-]{8,100}$/.test(session)) return reply(res, 400, { error: 'Invalid presence data' });
+            if (p.offline) presence.delete(session); else presence.set(session, { user, at: Date.now() });
+            return reply(res, 200, { ok: true });
+        }
         if (req.method === 'GET' && u.pathname === '/health') return reply(res, 200, { ok: true, version: stored.version });
         if (req.method === 'GET' && u.pathname === '/state') return reply(res, 200, { version: stored.version, state: stored.state });
         if (req.method === 'POST' && u.pathname === '/state') {
