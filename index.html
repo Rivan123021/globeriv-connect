@@ -1169,7 +1169,7 @@
         // POST /signal {to,from,type,payload,id}; GET /signal?user=...&after=...
         // Responses: {events:[{id,from,to,type,payload}]}. Server must authenticate, authorize
         // connected users, validate messages, and serve globally consistent user records.
-        function serverUrl() { const u = 'https://REPLACE-WITH-YOUR-SERVER.onrender.com'; return u.includes('REPLACE-WITH-YOUR-SERVER') ? '' : u } // Replace with your deployed HTTPS server URL
+        function serverUrl() { const u = 'https://globeriv-connect.onrender.com'; return u.includes('REPLACE-WITH-YOUR-SERVER') ? '' : u } // Replace with your deployed HTTPS server URL
         async function signalSend(to, type, payload = {}) {
             const event = { id: (globalThis.crypto?.randomUUID?.()) || String(Date.now()) + Math.random(), from: me, to, type, payload };
             if (serverUrl()) {
