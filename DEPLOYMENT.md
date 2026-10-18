@@ -1,30 +1,14 @@
-# GlobeRiv Connect: cross-browser development setup
+# GlobeRiv Connect — typing / group-call update
 
-This package contains `index.html` (GitHub Pages frontend) and `server.js` (experimental HTTPS backend). Both files must be deployed: GitHub Pages cannot execute server.js. No Node installation is required on your own computer.
+Deploy both updated files:
+1. In the GitHub Pages repository `globeriv`, replace `index.html` and commit it.
+2. In the Render-connected repository, replace `server.js` and commit it. Wait for the Render deployment to show **Live**.
+3. Refresh the website on both devices (close old tabs or hard-refresh) to get the updated HTML.
+4. Test typing in a one-to-one chat from Chrome to Safari/Firefox. Next, type in a group; the other participants should see the avatar and animated dots.
+5. Test group audio/video with three or more disposable accounts on different browsers, then try someone joining later.
 
-## Deployment for testing only
+## Browser limitations
 
-1. Create a GitHub repository containing `index.html` and `server.js`.
-2. Create a **Node Web Service** on a hosting platform such as Render, linked to the same repository.
-   - Build command: `echo ready`
-   - Start command: `node server.js`
-   - Node runtime: 20+
-   - Environment: `FRONTEND_ORIGIN=https://rivan123021.github.io`
-   - Set `DATA_FILE` to a path on **persistent disk** if your host supports one. Without persistent disk, accounts/chats reset when the host restarts or redeploys.
-3. Copy the HTTPS URL assigned to the hosted backend (such as `https://your-project.onrender.com`).
-4. Open `index.html` and replace `https://REPLACE-WITH-YOUR-SERVER.onrender.com` with that URL. Do not append `/state` or `/signal`.
-5. Commit `index.html` to GitHub and enable GitHub Pages (main branch, root directory).
-6. Open the published website on two different browsers and try test usernames only. A server health check is `https://your-project.onrender.com/health`.
+Phone browsers may block autoplay sound, especially before the user interacts with the page, while the page is backgrounded, or when the device is in silent mode. GlobeRiv Connect tries to prime its ringtone on a normal tap and replays it for incoming calls, but a webpage cannot force silent-mode audio or guarantee background ringing. Reliable alerts when the app is closed need Web Push notifications / an installed app with permissions and a secure push backend.
 
-## Important security / reliability limitations
-
-**Do not launch this as a public app or use real passwords.** The current UI was originally a browser-only prototype and its persistence relies on a shared JSON state. This bridge was added for cross-browser *development tests*, NOT for a secure public release.
-
-- `/state` currently exchanges one shared state snapshot without authenticated access controls. It may expose test-account passwords and messages; anyone who finds your public backend URL may read or modify them.
-- `/signal` isn't authenticated; callers aren't verified. Internet WebRTC also needs TURN for restrictive networks.
-- Whole-state updates can overwrite concurrent changes. The server attempts to merge some conflicts but this is not transaction-safe or suitable for production.
-- Online presence and typing indicators still use local browser storage and aren't yet globally synchronized.
-- Profile pictures / voice data stored in localStorage may exceed browser or host limits.
-- A public launch requires hashed passwords, server-verified sessions, permission-checked per-user endpoints, database transactions, rate limits, secure media storage, and authenticated real-time presence/signaling.
-
-Use this bundle **only with disposable dummy accounts in a private test deployment**. Do not share its public URL or create real accounts until these safeguards are implemented.
+WebRTC mesh calls require all peers to establish connections; restrictive networks may need TURN. The existing backend is experimental and **insecure**, exposing the test account/message state. Do not use actual passwords, personal messages, or public real users until proper authentication, permission-checked APIs, and secure storage are implemented.
