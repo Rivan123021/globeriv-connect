@@ -1169,7 +1169,7 @@
         // POST /signal {to,from,type,payload,id}; GET /signal?user=...&after=...
         // Responses: {events:[{id,from,to,type,payload}]}. Server must authenticate, authorize
         // connected users, validate messages, and serve globally consistent user records.
-        function serverUrl() { return '' } // Offline preview: no public signaling server is configured
+        function serverUrl() { const u = 'https://REPLACE-WITH-YOUR-SERVER.onrender.com'; return u.includes('REPLACE-WITH-YOUR-SERVER') ? '' : u } // Replace with your deployed HTTPS server URL
         async function signalSend(to, type, payload = {}) {
             const event = { id: (globalThis.crypto?.randomUUID?.()) || String(Date.now()) + Math.random(), from: me, to, type, payload };
             if (serverUrl()) {
@@ -1411,7 +1411,40 @@
         function modal(html) { $('#overlay').innerHTML = `<div class="overlay"><div class="card modal">${html}</div></div>` } function closeModal() { $('#overlay').innerHTML = '' }
         window.addEventListener('storage', e => { if (e.key === KEY) { db = getDb(); if (!me || !db.users[me]) return chooseAccount(); const isOpen = !!selected && (selected.startsWith('g:') ? !!db.groups?.[selected.slice(2)]?.members.includes(me) : friends(me, selected)); if (selected && !isOpen && !selected.startsWith('g:')) { selected = ''; render(); return } const wasAtBottom = $('#messages') ? $('#messages').scrollHeight - $('#messages').scrollTop - $('#messages').clientHeight < 90 : true; members(); if (selected) { const sig = chatSignature(); if (sig !== lastChatSignature) { chat(); if (!wasAtBottom && $('#messages')) $('#messages').scrollTop = 0 } } } if (e.key === SIGNAL_KEY) signalReceive() });
         setInterval(() => { if (me) { const fresh = getDb(); if (JSON.stringify(fresh) !== JSON.stringify(db)) { db = fresh; members(); if (selected) { const sig = chatSignature(); if (sig !== lastChatSignature) chat() } } signalReceive() } }, 1800);
-        db = getDb(); me = null; sessionStorage.removeItem(SESSION); localStorage.removeItem(SESSION); chooseAccount();
+        // Experimental remote synchronization bridge. The original UI and local demo remain intact.
+        // WARNING: shared-state endpoint is deliberately for testing ONLY; public deployment requires
+        // authenticated user-scoped operations and server-side permission checks.
+        let globalVersion = 0, globalSyncBusy = false, lastGlobalPush = Promise.resolve(), globalReady = false;
+        const initialSave = save;
+        save = function () {
+            initialSave();
+            if (!globalReady || !/^https:\/\/(?!REPLACE-)/i.test(serverUrl())) return;
+            const snapshot = JSON.parse(JSON.stringify(db));
+            const ver = globalVersion;
+            lastGlobalPush = lastGlobalPush.then(async () => {
+                const r = await fetch(serverUrl() + '/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: ver, state: snapshot }) });
+                if (!r.ok) throw Error('Sync failed: ' + r.status);
+                const result = await r.json(); globalVersion = result.version;
+            }).catch(e => console.warn('Sync push:', e));
+        };
+        async function globalPull() {
+            if (!/^https:\/\/(?!REPLACE-)/i.test(serverUrl()) || globalSyncBusy) return;
+            globalSyncBusy = true;
+            try {
+                await lastGlobalPush;
+                const r = await fetch(serverUrl() + '/state', { cache: 'no-store' }); if (!r.ok) throw Error('Server ' + r.status);
+                const result = await r.json();
+                if (!globalReady || result.version !== globalVersion) {
+                    globalVersion = result.version;
+                    localStorage.setItem(KEY, JSON.stringify(result.state));
+                    db = getDb();
+                    if (globalReady && me && !isChatLoading) { members(); if (selected) { const sig = chatSignature(); if (sig !== lastChatSignature) chat() } }
+                }
+                globalReady = true;
+            } catch (e) { console.warn('Global sync unavailable', e) } finally { globalSyncBusy = false }
+        }
+        setInterval(globalPull, 2200);
+        db = getDb(); me = null; sessionStorage.removeItem(SESSION); localStorage.removeItem(SESSION); chooseAccount(); globalPull();
     </script>
 </body>
 
